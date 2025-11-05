@@ -3,7 +3,6 @@ title: "Assignment 4"
 author: "Beining Niu"
 subtitle: "Due at 11:59pm on November 4."
 format: pdf
-editor: visual
 ---
 
 This is an individual assignment. Turn in this assignment as an HTML or PDF file to ELMS. Make sure to include the R Markdown or Quarto file that was used to generate it. Include the GitHub link for the repository containing these files.
@@ -57,33 +56,132 @@ Information on the \`crime\` table can be found here:
 Write a first query that counts the number of rows of the \`crime\` table in the year 2016. Use code chunks with {sql connection = con} in order to write SQL code within the document.
 
 ```{sql connection = con}
-SELECT count(primary_type) AS primary_count, count(*) AS overall_count -- counting non-missing primary count and overall
-FROM crime 
-WHERE year = 2015 
-LIMIT 10;
+SELECT
+COUNT(*) AS n_rows_2016
+FROM crime
+WHERE year = 2016;
 ```
 
 Next, count the number of arrests grouped by `primary_type` in 2016. Note that is a somewhat similar task as above, with some adjustments on which rows should be considered. Sort the results, i.e. list the number of arrests in a descending order.
 
+```{sql connection = con}
+SELECT
+primary_type,
+COUNT(*) AS n_arrests
+FROM crime
+WHERE year = 2016
+AND arrest = TRUE
+GROUP BY primary_type
+ORDER BY n_arrests DESC;
+```
+
 We can also use the `date` for grouping. Count the number of arrests grouped by hour of the day in 2016. You can extract the latter information from `date` via `EXTRACT(HOUR FROM date)`. Which time of the day is associated with the most arrests?
+
+```{sql connection = con}
+SELECT
+EXTRACT(HOUR FROM date) AS hour,
+COUNT(*) AS n_arrests
+FROM crime
+WHERE year = 2016
+AND arrest = TRUE
+GROUP BY hour
+ORDER BY hour;
+```
+
+The hour associated with the highest number of arrests is 19:00. This suggests that criminal incidents leading to arrests are most common during early evening hours, which is consistent with increased public activity and social interaction during that time.
 
 Focus only on `HOMICIDE` and count the number of arrests for this incident type, grouped by year. List the results in descending order.
 
+```{sql connection = con}
+SELECT
+year,
+COUNT(*) AS homicide_arrests
+FROM crime
+WHERE primary_type = 'HOMICIDE'
+AND arrest = TRUE
+GROUP BY year
+ORDER BY homicide_arrests DESC;
+```
+
 Find out which districts have the highest numbers of arrests in 2015 and 2016. That is, count the number of arrests in 2015 and 2016, grouped by year and district. List the results in descending order.
+
+```{sql connection = con}
+SELECT
+year,
+district,
+COUNT(*) AS n_arrests
+FROM crime
+WHERE arrest = TRUE
+AND year IN (2015, 2016)
+GROUP BY year, district
+ORDER BY n_arrests DESC;
+```
 
 Lets switch to writing queries from within R via the `DBI` package. Create a query object that counts the number of arrests grouped by `primary_type` of district 11 in year 2016. The results should be displayed in descending order.
 
 Execute the query.
 
+```{r}
+query_dist11 <- "
+  SELECT primary_type,
+         COUNT(*) AS n_arrests
+  FROM crime
+  WHERE year = 2016
+    AND district = 11
+    AND arrest = TRUE
+  GROUP BY primary_type
+  ORDER BY n_arrests DESC;
+"
+
+result_dist11 <- DBI::dbGetQuery(con, query_dist11)
+
+result_dist11
+```
+
 Try to write the very same query, now using the `dbplyr` package. For this, you need to first map the `crime` table to a tibble object in R.
+
+```{r}
+library(dbplyr)
+library(dplyr)
+crime_tbl <- tbl(con, "crime")
+```
 
 Again, count the number of arrests grouped by `primary_type` of district 11 in year 2016, now using `dplyr` syntax.
 
+```{r}
+crime_tbl %>%
+  filter(year == 2016,
+         district == 11,
+         arrest == TRUE) %>%
+  group_by(primary_type) %>%
+  tally(name = "n_arrests") %>%
+  arrange(desc(n_arrests))
+```
+
 Count the number of arrests grouped by `primary_type` and `year`, still only for district 11. Arrange the result by `year`.
+
+```{r}
+crime_tbl %>%
+  filter(district == 11, arrest == TRUE) %>%
+  group_by(primary_type, year) %>%
+  tally(name = "n_arrests") %>%
+  arrange(year) %>%
+  collect()
+```
 
 Assign the results of the query above to a local R object.
 
 Confirm that you pulled the data to the local environment by displaying the first ten rows of the saved data set.
+
+```{r}
+dist11_2016_dplyr <- crime_tbl %>%
+  filter(year == 2016, district == 11, arrest == TRUE) %>%
+  count(primary_type, name = "n_arrests") %>%
+  arrange(desc(n_arrests)) %>%
+  collect()
+
+head(dist11_2016_dplyr, 10)
+```
 
 Close the connection.
 
